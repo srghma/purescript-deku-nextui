@@ -1,155 +1,76 @@
 package:
   publish:
     version: 0.0.0
-    license: "Apache-2.0"
+    license: Apache-2.0
   name: deku-nextui
   dependencies:
-    - console
-    - effect
-    - prelude
-    - free
-    - deku
-    - deku-core
-    - yoga-fetch
-    - yoga-json
-    - affjax-web
-    - affjax
-    - profunctor-lenses
-    - string-parsers
-    - tidy-codegen
     - aff
-    - routing-duplex
-    - random
-    - argonaut-core
-    - fetch
-    - routing
-    - filterable
+    - arrays
+    - console
+    - debug
+    - deku-core
     - deku-dom
-    - qualified-do
-    - canvas
-    - uint
-    - arraybuffer
-    - avar
-    - web-pointerevents
-    - web-touchevents
-    - stringutils
+    - effect
+    - foldable-traversable
+    - integers
+    - maybe
+    - partial
+    - prelude
+    - tuples
+    - web-html
   test:
     main: Test.Main
     dependencies: []
 workspace:
-  # package_set:
-  #   registry: 50.4.0
-  extra_packages:
-    # hyrule:
-    #   git: "https://github.com/mikesol/purescript-hyrule.git"
-    #   # ref: "f388528a9aaa25a5307bf67f6ed12d2097620929"
-    #   version: "main"
-    #   dependencies:
-    #     - effect
-    #     - js-timers
-    #     - unsafe-reference
-    #     - web-html
-    #     - web-uievents
+  packageSet:
+    registry: 62.0.0
+  extraPackages:
+    hyrule:
+      # git: https://github.com/mikesol/purescript-hyrule.git
+      # ref: master
+      # git: https://github.com/srghma/purescript-hyrule.git
+      # ref: hyrule-master
+      path: /home/srghma/projects/purescript-hyrule
     bolson:
-      git: "https://github.com/mikesol/purescript-bolson.git"
-      ref: "main"
-      # ref: "d87900ceedfb81814bd282be464fa4c8a55677c2"
-      # version: "main"
-      dependencies:
-        # - hyrule
-        - fast-vect
+      # git: https://github.com/mikesol/purescript-bolson.git
+      # git: https://github.com/srghma/purescript-bolson.git
+      # ref: main
+      path: /home/srghma/projects/purescript-bolson
     deku:
-      git: "https://github.com/mikesol/purescript-deku.git"
-      subdir: deku
-      # ref: "22d4756f831ac57c17286bae86a5799a0377239a"
-      ref: "main"
-      # dependencies: []
-      # dependencies:
-      #   - bolson
+      # git: https://github.com/mikesol/purescript-deku.git
+      # ref: main
+      # subdir: deku
+      path: /home/srghma/projects/purescript-deku/deku
     deku-core:
-      git: "https://github.com/mikesol/purescript-deku.git"
-      subdir: deku-core
-      # ref: "22d4756f831ac57c17286bae86a5799a0377239a"
-      ref: "main"
-      # dependencies: []
-      # dependencies:
-      #   - bolson
+      # git: https://github.com/mikesol/purescript-deku.git
+      # ref: main
+      # subdir: deku-core
+      path: /home/srghma/projects/purescript-deku/deku-core
     deku-css:
-      git: "https://github.com/mikesol/purescript-deku.git"
-      subdir: deku-css
-      ref: "main"
+      # git: https://github.com/mikesol/purescript-deku.git
+      # ref: main
+      # subdir: deku-css
+      path: /home/srghma/projects/purescript-deku/deku-css
     deku-dom:
-      git: "https://github.com/mikesol/purescript-deku.git"
-      subdir: deku-dom
-      ref: "main"
-      # ref: "22d4756f831ac57c17286bae86a5799a0377239a"
-      # dependencies: []
-      # dependencies:
-      #   - bolson
+      # git: https://github.com/mikesol/purescript-deku.git
+      # ref: main
+      # subdir: deku-dom
+      path: /home/srghma/projects/purescript-deku/deku-dom
+    dodo-printer:
+      # git: https://github.com/natefaubion/purescript-dodo-printer.git
+      # git: https://github.com/srghma/purescript-dodo-printer.git
+      # ref: master
+      path: /home/srghma/projects/purescript-dodo-printer
     tidy:
-      repo: "https://github.com/natefaubion/purescript-tidy.git"
-      # git: "https://github.com/natefaubion/purescript-tidy.git"
-      # ref: "main"
-      version: "main"
-      # dependencies: []
-      dependencies:
-        - arrays
-        - dodo-printer
-        - foldable-traversable
-        - lists
-        - maybe
-        - ordered-collections
-        - partial
-        - prelude
-        - language-cst-parser
-        - strings
-        - tuples
+      # git: https://github.com/natefaubion/purescript-tidy.git
+      # git: https://github.com/srghma/purescript-tidy.git
+      # ref: main
+      # subdir: lib
+      path: /home/srghma/projects/purescript-tidy/lib
+    tldr:
+      path: /home/srghma/projects/purescript-tldr
     tidy-codegen:
-      repo: "https://github.com/natefaubion/purescript-tidy-codegen.git"
-      # git: "https://github.com/natefaubion/purescript-tidy-codegen.git"
-      # ref: "main"
-      version: "main"
-      # dependencies: []
-      dependencies:
-        - aff
-        - ansi
-        - arrays
-        - avar
-        - bifunctors
-        - console
-        - control
-        - dodo-printer
-        - effect
-        - either
-        - enums
-        - exceptions
-        - filterable
-        - foldable-traversable
-        - free
-        - identity
-        - integers
-        - language-cst-parser
-        - lazy
-        - lists
-        - maybe
-        - newtype
-        - node-buffer
-        - node-child-process
-        - node-fs-aff
-        - node-path
-        - node-process
-        - node-streams
-        - ordered-collections
-        - parallel
-        - partial
-        - posix-types
-        - prelude
-        - record
-        - safe-coerce
-        - st
-        - strings
-        - tidy
-        - transformers
-        - tuples
-        - type-equality
-        - unicode
+      # git: https://github.com/natefaubion/purescript-tidy-codegen.git
+      # git: https://github.com/srghma/purescript-tidy-codegen.git
+      # ref: main
+      path: /home/srghma/projects/purescript-tidy-codegen
