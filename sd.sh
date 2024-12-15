@@ -1,0 +1,5 @@
+sd -F '@/lib/' '@/registry/default/lib/' $(fd --full-path --type file 'src/app/examples')
+sd -F '@/hooks/' '@/registry/default/hooks/' $(fd --full-path --type file 'src/app/examples')
+sd -F '@/lib/' '@/registry/default/lib/' $(fd --full-path --type file 'registry/default')
+sd -F '@/components/' '@/registry/default/components/' $(fd --full-path --type file 'src/app/examples')
+sd -F '@/icons/' '@/registry/default/icons/' $(fd --full-path --type file 'src/app/examples')

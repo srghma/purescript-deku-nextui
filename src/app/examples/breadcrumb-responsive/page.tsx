@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 
-import { useMediaQuery } from "@/hooks/use-media-query"
+import { useMediaQuery } from "@/registry/default/hooks/use-media-query"
 import {
   Breadcrumb,
   BreadcrumbEllipsis,

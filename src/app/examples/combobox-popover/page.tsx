@@ -10,7 +10,7 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { cn } from "@/lib/utils"
+import { cn } from "@/registry/default/lib/utils"
 import { Button } from "@/registry/default/ui/button"
 import {
   Command,
