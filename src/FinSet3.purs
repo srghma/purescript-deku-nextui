@@ -9,7 +9,7 @@ import Data.Show.Generic (genericShow)
 import Data.Bounded (class Bounded)
 import Data.Bounded.Generic (genericBottom, genericTop)
 import Data.Enum.Generic (genericPred, genericSucc)
-import Topology (class HasUniverse)
+import Topology
 
 data FinSet3 = A3 | B3 | C3
 
@@ -40,3 +40,8 @@ instance boundedEnumFinSet3 :: BoundedEnum FinSet3 where
 
 instance hasUniverseFinSet3 :: HasUniverse FinSet3 where
   universe = Set.fromFoldable [ A3, B3, C3 ]
+
+instance ShowTopologicalSpaceElement FinSet3 where
+  showTopologicalSpaceElement A3 = "a"
+  showTopologicalSpaceElement B3 = "b"
+  showTopologicalSpaceElement C3 = "c"

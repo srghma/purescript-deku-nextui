@@ -7,7 +7,7 @@ import Data.Enum (class Enum, class BoundedEnum, Cardinality(..))
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
 import Data.Bounded (class Bounded)
-import Topology (class HasUniverse)
+import Topology
 
 data FinSet2 = A2 | B2
 
@@ -38,3 +38,7 @@ instance boundedEnumFinSet2 :: BoundedEnum FinSet2 where
 
 instance hasUniverseFinSet2 :: HasUniverse FinSet2 where
   universe = Set.fromFoldable [ A2, B2 ]
+
+instance ShowTopologicalSpaceElement FinSet2 where
+  showTopologicalSpaceElement A2 = "a"
+  showTopologicalSpaceElement B2 = "b"
