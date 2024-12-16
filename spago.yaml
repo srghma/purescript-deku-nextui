@@ -20,7 +20,8 @@ package:
     - web-html
   test:
     main: Test.Main
-    dependencies: []
+    dependencies:
+      - spec-node
 workspace:
   packageSet:
     registry: 62.0.0

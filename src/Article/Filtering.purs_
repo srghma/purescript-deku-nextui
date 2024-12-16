@@ -6,7 +6,7 @@ import Control.Alt ((<|>))
 import Data.Filterable (filter)
 import Deku.Control (text, text_)
 import Deku.DOM as D
-import Deku.Toplevel (runInBody1)
+import Deku.Toplevel (runInBody)
 import Effect (Effect)
 import FRP.Event (bang, fold, memoize)
 import FRP.Event.Time (interval)
