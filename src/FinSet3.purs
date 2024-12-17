@@ -41,7 +41,7 @@ instance boundedEnumFinSet3 :: BoundedEnum FinSet3 where
 instance hasUniverseFinSet3 :: HasUniverse FinSet3 where
   universe = Set.fromFoldable [ A3, B3, C3 ]
 
-instance ShowTopologySpaceElement FinSet3 where
-  showTopologicalSpaceElement A3 = "a"
-  showTopologicalSpaceElement B3 = "b"
-  showTopologicalSpaceElement C3 = "c"
+instance Pretty FinSet3 where
+  pretty A3 = "a"
+  pretty B3 = "b"
+  pretty C3 = "c"
