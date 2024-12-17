@@ -4,112 +4,113 @@ import FinSet2
 import FinSet3
 import Prelude
 import Topology
+
+import Control.Monad.Error.Class (class MonadError, class MonadThrow, throwError, try)
+import Data.Either (Either(..))
 import Data.Enum (class Enum, class BoundedEnum, fromEnum, toEnum)
+import Data.Foldable (class Foldable, elem, for_, notElem)
 import Data.Generic.Rep (class Generic)
 import Data.Maybe (Maybe(..))
+import Data.Newtype (class Newtype)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Show.Generic (genericShow)
 import Effect (Effect)
 import Effect.Aff (launchAff_)
-import Test.Spec (describe, it, Spec)
-import Test.Spec.Assertions (shouldEqual)
+import Effect.Exception (Error, error)
+import Test.Spec (Spec, describe, describeOnly, it)
+import Test.Spec.Assertions (fail, shouldEqual)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner (runSpec)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
-import Control.Monad.Error.Class (class MonadError, class MonadThrow, throwError, try)
-import Data.Either (Either(..))
-import Data.Foldable (class Foldable, notElem, elem)
-import Data.Newtype (class Newtype)
-import Effect.Exception (Error, error)
+
+itTopologySpaceSatisfies :: forall a. ShowTopologySpaceElement a => Ord a => (TopologySpace a -> Boolean) -> TopologySpace a -> Boolean -> Spec Unit
+itTopologySpaceSatisfies property set expected = do
+  let topologyString = show (ShowTopologicalSpace set)
+  it topologyString do
+    let actual = property set
+    unless (actual == expected)
+      $ fail
+      $ "actual = " <> show actual <> ", expected = " <> show expected
+
+itClosedUnderUnions :: forall a. Show a => ShowTopologySpaceElement a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itClosedUnderUnions = itTopologySpaceSatisfies closedUnderUnions
+
+itClosedUnderIntersections :: forall a. ShowTopologySpaceElement a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itClosedUnderIntersections = itTopologySpaceSatisfies closedUnderIntersections
+
+itContainsEmptySet :: forall a. ShowTopologySpaceElement a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itContainsEmptySet = itTopologySpaceSatisfies containsEmptySet
+
+itContainsParentSet :: forall a. ShowTopologySpaceElement a => HasUniverse a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itContainsParentSet = itTopologySpaceSatisfies containsParentSet
+
+itIsHausdorff :: forall a. ShowTopologySpaceElement a => HasUniverse a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itIsHausdorff = itTopologySpaceSatisfies isHausdorff
+
+itIsValidTopologySpace :: forall a. Show a => ShowTopologySpaceElement a => HasUniverse a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itIsValidTopologySpace = itTopologySpaceSatisfies isValidTopologySpace
 
 spec :: Spec Unit
 spec = do
   describe "Topology" do
     describe "containsEmptySet" do
-      it "should return true when topology contains empty set" do
-        containsEmptySet (Set.singleton Set.empty :: TopologySpace FinSet2) `shouldEqual` true
-      it "should return false when topology doesn't contain empty set" do
-        containsEmptySet (Set.singleton (Set.singleton A2)) `shouldEqual` false
-      it "should handle multiple empty sets" do
-        let topology = Set.fromFoldable [ Set.empty, Set.empty ] :: TopologySpace FinSet2
-        containsEmptySet topology `shouldEqual` true
+      itContainsEmptySet (Set.singleton Set.empty :: TopologySpace FinSet2) true
+      itContainsEmptySet (Set.singleton (Set.singleton A2)) false
+      itContainsEmptySet (Set.fromFoldable [ Set.empty, Set.empty ] :: TopologySpace FinSet2) true
 
     describe "containsParentSet" do
-      it "should return true when topology contains universe" do
-        let topology = Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2
-        containsParentSet topology `shouldEqual` true
-      it "should return false when topology doesn't contain universe" do
-        let topology = Set.fromFoldable [ Set.empty, Set.singleton A2 ]
-        containsParentSet topology `shouldEqual` false
-      it "should handle subset of universe" do
-        let topology = Set.fromFoldable [ Set.singleton A2, Set.singleton B2 ]
-        containsParentSet topology `shouldEqual` false
+      itContainsParentSet (Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2) true
+      itContainsParentSet (Set.fromFoldable [ Set.empty, Set.singleton A2 ]) false
+      itContainsParentSet (Set.fromFoldable [ Set.singleton A2, Set.singleton B2 ]) false
 
     describe "closedUnderUnions" do
-      it "should validate topology closed under unions" do
-        let topology = Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ] :: TopologySpace FinSet2
-        closedUnderUnions topology `shouldEqual` true
-      it "should reject topology not closed under unions" do
-        let topology = Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2 ] :: TopologySpace FinSet2
-        closedUnderUnions topology `shouldEqual` false
-      it "should handle empty topology" do
-        closedUnderUnions (Set.empty :: TopologySpace FinSet2) `shouldEqual` false
-      it "should handle singleton topology" do
-        let topology = Set.singleton universe :: TopologySpace FinSet2
-        closedUnderUnions topology `shouldEqual` true
+      itClosedUnderUnions (Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ] :: TopologySpace FinSet2) true
+      itClosedUnderUnions (Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2 ] :: TopologySpace FinSet2) false
+      itClosedUnderUnions (Set.empty :: TopologySpace FinSet2) false
+      itClosedUnderUnions (Set.singleton universe :: TopologySpace FinSet2) true
+      itClosedUnderUnions (Set.fromFoldable [ Set.empty, Set.fromFoldable [ A2 ], Set.fromFoldable [ A2, B2 ] ]) true
+      itClosedUnderUnions (Set.fromFoldable [ Set.empty, (universe :: Set FinSet2) ]) true
 
     describe "closedUnderIntersections" do
-      it "should validate topology closed under intersections" do
-        let topology = Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ] :: TopologySpace FinSet2
-        closedUnderIntersections topology `shouldEqual` true
-      it "should reject topology not closed under intersections" do
-        let topology = Set.fromFoldable [ Set.singleton A2, Set.singleton B2 ] :: TopologySpace FinSet2
-        closedUnderIntersections topology `shouldEqual` false
-      it "should handle empty intersection" do
-        let topology = Set.fromFoldable [ Set.empty, Set.singleton A2, universe ] :: TopologySpace FinSet2
-        closedUnderIntersections topology `shouldEqual` true
+      itClosedUnderIntersections (Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ] :: TopologySpace FinSet2) true
+      itClosedUnderIntersections (Set.fromFoldable [ Set.singleton A2, Set.singleton B2 ] :: TopologySpace FinSet2) false
+      itClosedUnderIntersections (Set.fromFoldable [ Set.empty, Set.singleton A2, universe ] :: TopologySpace FinSet2) true
 
     describe "isValidTopologySpace" do
-      it "should validate discrete topology" do
-        let discreteTopology = Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ] :: TopologySpace FinSet2
-        isValidTopologySpace discreteTopology `shouldEqual` true
-      it "should validate indiscrete topology" do
-        let indiscreteTopology = Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2
-        isValidTopologySpace indiscreteTopology `shouldEqual` true
-      it "should reject invalid topologies" do
-        let invalidTopology = Set.fromFoldable [ Set.singleton A2 ] :: TopologySpace FinSet2
-        isValidTopologySpace invalidTopology `shouldEqual` false
-      it "should handle empty topology" do
-        isValidTopologySpace (Set.empty :: TopologySpace FinSet2) `shouldEqual` false
-      it "should handle missing empty set" do
-        let topology = Set.fromFoldable [ Set.singleton A2, universe ] :: TopologySpace FinSet2
-        isValidTopologySpace topology `shouldEqual` false
+      let discreteTopology = Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ] :: TopologySpace FinSet2
+      let indiscreteTopology = Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2
+      let invalidTopology = Set.fromFoldable [ Set.singleton A2 ] :: TopologySpace FinSet2
+      let emptyTopology = Set.empty :: TopologySpace FinSet2
+      let missingEmptyTopology = Set.fromFoldable [ Set.singleton A2, universe ] :: TopologySpace FinSet2
+
+      itIsValidTopologySpace discreteTopology true
+      itIsValidTopologySpace indiscreteTopology true
+      itIsValidTopologySpace invalidTopology false
+      itIsValidTopologySpace emptyTopology false
+      itIsValidTopologySpace missingEmptyTopology false
 
     describe "isHausdorff" do
-      it "should validate Hausdorff spaces" do
-        let discreteTopology = Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ] :: TopologySpace FinSet2
-        isHausdorff discreteTopology `shouldEqual` true
-      it "should reject non-Hausdorff spaces" do
-        let indiscreteTopology = Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2
-        isHausdorff indiscreteTopology `shouldEqual` false
-      it "should handle three-point Hausdorff space" do
-        let
-          hausdorffTopology =
-            Set.fromFoldable
-              [ Set.empty
-              , Set.singleton A3
-              , Set.singleton B3
-              , Set.singleton C3
-              , Set.fromFoldable [ A3, B3 ]
-              , Set.fromFoldable [ B3, C3 ]
-              , Set.fromFoldable [ A3, C3 ]
-              , universe
-              ] :: TopologySpace FinSet3
-        isHausdorff hausdorffTopology `shouldEqual` true
-      it "should reject insufficient separation" do
-        let topology = Set.fromFoldable [ Set.empty, Set.singleton A3, universe ] :: TopologySpace FinSet3
-        isHausdorff topology `shouldEqual` false
+      let discreteTopology = Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ] :: TopologySpace FinSet2
+      let indiscreteTopology = Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2
+      let
+        hausdorffTopology =
+          Set.fromFoldable
+            [ Set.empty
+            , Set.singleton A3
+            , Set.singleton B3
+            , Set.singleton C3
+            , Set.fromFoldable [ A3, B3 ]
+            , Set.fromFoldable [ B3, C3 ]
+            , Set.fromFoldable [ A3, C3 ]
+            , universe
+            ] :: TopologySpace FinSet3
+      let insufficientSepTopology = Set.fromFoldable [ Set.empty, Set.singleton A3, universe ] :: TopologySpace FinSet3
+
+      itIsHausdorff discreteTopology true
+      itIsHausdorff indiscreteTopology false
+      itIsHausdorff hausdorffTopology true
+      itIsHausdorff insufficientSepTopology false
 
     describe "powerset" do
       it "should return the correct power set of an empty set" do
@@ -183,12 +184,108 @@ spec = do
         , Set.fromFoldable [ Set.empty, Set.singleton B2, universe ]
         , Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
         ]
-    Set.filter isValidTopologySpace powersetUniverse2 `shouldEqualTopologicalSets` expectedPowersetOfPowerset
+    Set.filter isValidTopologySpace powersetUniverse2 `shouldEqualTopologicalSets` validTopologies
+    let
+      validHausdorff = Set.fromFoldable
+        [ Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
+        ]
+    Set.filter isHausdorff (Set.filter isValidTopologySpace powersetUniverse2) `shouldEqualTopologicalSets` validHausdorff
+    Set.filter isHausdorff powersetUniverse2 `shouldEqualTopologicalSets` validHausdorff
+
+  describe "topology properties" do
+    let
+      topologiesList :: Array { set :: TopologySpace FinSet3, closedUnderUnions :: Boolean, closedUnderIntersections :: Boolean }
+      topologiesList =
+        [ -- {∅, {a}, {a,b}, {a,b,c}}
+          { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe ], closedUnderUnions: true, closedUnderIntersections: true }
+        -- {∅, {a}, {a,b}, {a,b,c}, {b}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        --{∅, {a}, {a,b}, {a,b,c}, {b}, {b,c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a}, {a,b}, {a,b,c}, {a,c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a}, {a,b}, {a,b,c}, {a,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a}, {a,b}, {a,b,c}, {a,c}, {b}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a}, {a,b}, {a,b,c}, {a,c}, {b}, {b,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: true, closedUnderIntersections: true }
+        -- {∅, {a}, {a,b,c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe ], closedUnderUnions: true, closedUnderIntersections: true }
+        -- {∅, {a}, {a,b,c}, {b,c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: true }
+        -- {∅, {a}, {a,b,c}, {a,c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ A3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: true }
+        -- {∅, {a}, {a,b,c}, {a,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ A3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a}, {a,b,c}, {a,c}, {b,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ A3, C3 ], Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b}, {a,b,c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe ], closedUnderUnions: true, closedUnderIntersections: true }
+        -- {∅, {a,b}, {a,b,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b}, {a,b,c}, {b}}
+        , { set: Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b}, {a,b,c}, {b}, {b,c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b}, {a,b,c}, {b}, {b,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b,c}}
+        , { set: Set.fromFoldable [ Set.empty, universe ], closedUnderUnions: true, closedUnderIntersections: true }
+        -- {∅, {a,b,c}, {b}}
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: true }
+        -- {∅, {a,b,c}, {b}, {b,c}}
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b,c}, {b}, {b,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b,c}, {b,c}}
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: true, closedUnderIntersections: true }
+        -- {∅, {a,b,c}, {b,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b,c}, {a,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ A3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b,c}, {a,c}, {b}}
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b,c}, {a,c}, {b}, {b,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        -- {∅, {a,b,c}, {a,c}, {b,c}, {c}}
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ A3, C3 ], Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        ]
+    describe "closedUnderUnions" do
+      for_ topologiesList \testCase -> itClosedUnderUnions testCase.set testCase.closedUnderUnions
+
+    describe "closedUnderIntersections" do
+      pure unit
+
+-- for_ topologiesList \testCase -> itClosedUnderIntersections testCase.set testCase.closedUnderUnions
+
+-- it "Powerset of powerset of universe (3 elements)" do
+--   let powersetUniverse = powerset universe
+--   let powersetUniverse2 = powerset powersetUniverse
+--   let
+--     validTopologies = Set.fromFoldable
+--       [ Set.fromFoldable [ Set.empty, universe ]
+--       , Set.fromFoldable [ Set.empty, Set.singleton A3, universe ]
+--       , Set.fromFoldable [ Set.empty, Set.singleton B3, universe ]
+--       , Set.fromFoldable [ Set.empty, Set.singleton C3, universe ]
+--       , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton B3, universe ]
+--       , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton C3, universe ]
+--       , Set.fromFoldable [ Set.empty, Set.singleton B3, Set.singleton C3, universe ]
+--       , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton B3, Set.singleton C3, universe ]
+--       ]
+--   Set.filter isValidTopologySpace powersetUniverse2 `shouldEqualTopologicalSets` validTopologies
+
+-- let
+--   validHausdorff = Set.fromFoldable
+--     [ Set.fromFoldable [Set.empty, Set.singleton A3, Set.singleton B3, Set.singleton C3, universe]
+--     ]
+-- Set.filter isHausdorff (Set.filter isValidTopologySpace powersetUniverse2) `shouldEqualTopologicalSets` validHausdorff
+-- Set.filter isHausdorff powersetUniverse2 `shouldEqualTopologicalSets` validHausdorff
 
 shouldEqualTopologicalSets
   :: forall m a
    . MonadThrow Error m
-  => ShowTopologicalSpaceElement a
+  => ShowTopologySpaceElement a
   => Ord a
   => Eq a
   => Set (TopologySpace a)

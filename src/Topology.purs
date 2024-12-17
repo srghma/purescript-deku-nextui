@@ -3,39 +3,40 @@ module Topology where
 import Prelude
 
 import Data.Array as Array
-import Data.Foldable (all, any)
+import Data.Foldable (class Foldable, all, any, foldl, foldr)
+import Data.List (List(..), mapMaybe, (:))
+import Data.List as List
 import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.String as String
 import Data.Tuple (Tuple(..))
+import Debug as Debug
 
 class HasUniverse a where
   universe :: Set a
 
-type TopologySpace a = Set (Set a)
+data TopologySpace a = TopologySpace (Set (Set a))
 
-newtype ShowTopologicalSpace a = ShowTopologicalSpace (TopologySpace a)
-
-class ShowTopologicalSpaceElement a where
+class ShowTopologySpaceElement a where
   showTopologicalSpaceElement :: a -> String
 
 instance Newtype (ShowTopologicalSpace a) (TopologySpace a)
 derive newtype instance (Eq a) => Eq (ShowTopologicalSpace a)
 derive newtype instance (Ord a) => Ord (ShowTopologicalSpace a)
 -- Show instance for ShowTopologicalSpace
-instance (Ord a, ShowTopologicalSpaceElement a) => Show (ShowTopologicalSpace a) where
+instance (Ord a, ShowTopologySpaceElement a) => Show (ShowTopologicalSpace a) where
   show (ShowTopologicalSpace topology) =
     let
       showSet :: Set a -> String
       showSet subset =
         if Set.isEmpty subset then "∅"
-        else "{" <> (subset # Set.toUnfoldable # map showTopologicalSpaceElement # String.joinWith ",") <> "}"
+        else "{" <> (subset # Set.toUnfoldable # Array.sort # map showTopologicalSpaceElement # String.joinWith ",") <> "}"
 
       showTopology :: TopologySpace a -> String
       showTopology space =
-        "{" <> (space # Set.toUnfoldable # map showSet # String.joinWith ", ") <> "}"
+        "{" <> (space # Set.toUnfoldable # Array.sort # map showSet # String.joinWith ", ") <> "}"
     in
       showTopology topology
 
@@ -45,38 +46,34 @@ containsEmptySet = Set.member Set.empty
 containsParentSet :: forall a. Ord a => HasUniverse a => TopologySpace a -> Boolean
 containsParentSet = Set.member universe
 
-closedUnderUnions :: forall a. Ord a => HasUniverse a => TopologySpace a -> Boolean
+-- | Form the union of a collection of sets
+intersections :: forall f a. Foldable f => Ord a => f (Set a) -> Set a
+intersections = foldl Set.intersection Set.empty
+
+-- structure topological_space (X : Type) :=
+-- (is_open : set X → Prop)
+-- (is_open_univ : is_open set.univ)
+-- (is_open_empty : is_open ∅)
+-- (is_open_inter : ∀ (s t : set X), is_open s → is_open t → is_open (s ∩ t))
+
+-- | Check if a topology is closed under unions
+-- (is_open_union : ∀ (s : set (set X)), (∀ u ∈ s, is_open u) → is_open (⋃₀ s))
+closedUnderUnions :: forall a. Show a => Ord a => TopologySpace a -> Boolean
 closedUnderUnions topology =
-  if Set.isEmpty topology then false
-  else containsParentSet topology && allUnionsInTopology
-  where
-  allUnionsInTopology = all (\union -> Set.member union topology) allPossibleUnions
-  allPossibleUnions = Set.map (\(Tuple s1 s2) -> Set.union s1 s2) pairs
-  pairs = cartesianProduct topology topology
-  cartesianProduct s1 s2 = Set.fromFoldable do
-    x <- Array.fromFoldable s1
-    y <- Array.fromFoldable s2
-    pure $ Tuple x y
+  case subsetsOfSize2 topology of
+    Nothing -> false
+    Just subsets2 -> all (\(TwoElementSet x y) -> Set.member (Set.union x y) topology) (Debug.trace (show subsets2) (\_ -> subsets2))
 
-closedUnderIntersections :: forall a. Ord a => HasUniverse a => TopologySpace a -> Boolean
-closedUnderIntersections topology =
-  if Set.isEmpty topology then false
-  else containsParentSet topology && allIntersectionsInTopology
-  where
-  allIntersectionsInTopology = all checkIntersection (powerset topology)
-  checkIntersection subset =
-    if Set.isEmpty subset then true
-    else Set.member intersection topology
-    where
-    intersection = Array.foldl Set.intersection universe (Array.fromFoldable subset)
+-- | Check if a topology is closed under intersections
+closedUnderIntersections :: forall a. Ord a => Set (Set a) -> Boolean
+closedUnderIntersections topology = Set.member (Set.unions topology) topology
 
-isValidTopologySpace :: forall a. Ord a => HasUniverse a => TopologySpace a -> Boolean
+isValidTopologySpace :: forall a. Show a => Ord a => HasUniverse a => TopologySpace a -> Boolean
 isValidTopologySpace topology =
   containsEmptySet topology
     && containsParentSet topology
     && closedUnderUnions topology
-    &&
-      closedUnderIntersections topology
+    && closedUnderIntersections topology
 
 isHausdorff :: forall a. Ord a => HasUniverse a => TopologySpace a -> Boolean
 isHausdorff topology =
@@ -97,6 +94,42 @@ isHausdorff topology =
   openSetsContaining point = Set.filter
     (\s -> any (_ == point) s)
     topology
+
+-- Custom type for a TwoElementSet
+data TwoElementSet a = TwoElementSet a a
+
+derive instance Eq a => Eq (TwoElementSet a)
+derive instance Ord a => Ord (TwoElementSet a)
+instance Show a => Show (TwoElementSet a) where
+  show (TwoElementSet x y) = "(" <> show x <> ", " <> show y <> ")"
+
+-- Function to create a TwoElementSet, ensuring distinct elements
+makeTwoElementSet :: forall a. Ord a => a -> a -> Maybe (TwoElementSet a)
+makeTwoElementSet x y =
+  case compare x y of
+    EQ -> Nothing
+    LT -> Just (TwoElementSet x y)
+    GT -> Just (TwoElementSet y x)
+
+-- Function to compute all subsets of size 2, returning Maybe
+subsetsOfSize2 :: forall a. Ord a => Set a -> Maybe (Set (TwoElementSet a))
+subsetsOfSize2 xs =
+  let
+    arr = Set.toUnfoldable xs :: List a
+  in
+    if List.length arr < 2 then Nothing
+    else Just (go arr mempty)
+  where
+  go :: List a -> Set (TwoElementSet a) -> Set (TwoElementSet a)
+  go List.Nil acc = acc
+  go (x : rest) acc =
+    let
+      pairs = List.mapMaybe (\y -> makeTwoElementSet x y) rest
+    in
+      go rest (foldr (\pair s -> Set.insert pair s) acc pairs)
+
+powersetOrSize :: forall a. Ord a => Int -> Set a -> Set (Set a)
+powersetOrSize size set = Set.filter (\s -> Set.size s == size) (powerset set)
 
 powerset :: forall a. Ord a => Set a -> Set (Set a)
 powerset set =

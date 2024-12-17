@@ -39,6 +39,6 @@ instance boundedEnumFinSet2 :: BoundedEnum FinSet2 where
 instance hasUniverseFinSet2 :: HasUniverse FinSet2 where
   universe = Set.fromFoldable [ A2, B2 ]
 
-instance ShowTopologicalSpaceElement FinSet2 where
+instance ShowTopologySpaceElement FinSet2 where
   showTopologicalSpaceElement A2 = "a"
   showTopologicalSpaceElement B2 = "b"
