@@ -1,34 +1,28 @@
 module Test.Main where
 
-import FinSet2
-import FinSet3
 import Prelude
 import Topology
 
-import Control.Monad.Error.Class (class MonadError, class MonadThrow, throwError, try)
-import Data.Either (Either(..))
-import Data.Enum (class Enum, class BoundedEnum, fromEnum, toEnum)
-import Data.Foldable (class Foldable, elem, for_, notElem)
-import Data.Generic.Rep (class Generic)
+import Control.Monad.Error.Class (class MonadThrow)
+import Data.Foldable (for_)
 import Data.Maybe (Maybe(..))
-import Data.Newtype (class Newtype)
 import Data.Set (Set)
 import Data.Set as Set
-import Data.Show.Generic (genericShow)
 import Effect (Effect)
-import Effect.Aff (launchAff_)
-import Effect.Exception (Error, error)
-import Test.Spec (Spec, describe, describeOnly, it)
+import Effect.Class.Console (log)
+import Effect.Exception (Error)
+import FinSet2 (FinSet2(..))
+import FinSet3 (FinSet3(..))
+import Test.Spec (class FocusWarning, Spec, describe, describeOnly, it, itOnly)
 import Test.Spec.Assertions (fail)
 import Test.Spec.Assertions as Spec
 import Test.Spec.Reporter.Console (consoleReporter)
-import Test.Spec.Runner (runSpec)
 import Test.Spec.Runner.Node (runSpecAndExitProcess)
 
 itTopologySpaceSatisfies :: forall a. Pretty a => Ord a => (TopologySpace a -> Boolean) -> TopologySpace a -> Boolean -> Spec Unit
 itTopologySpaceSatisfies property topology expected = do
   let topologyString = pretty topology
-  it topologyString do
+  it (topologyString <> if expected then " should be ✅" else " should be ❌") do
     let actual = property topology
     unless (actual == expected)
       $ fail
@@ -52,38 +46,93 @@ itIsHausdorff = itTopologySpaceSatisfies isHausdorff
 itIsValidTopologySpace :: forall a. Show a => Pretty a => HasUniverse a => Ord a => TopologySpace a -> Boolean -> Spec Unit
 itIsValidTopologySpace = itTopologySpaceSatisfies isValidTopologySpace
 
+----------------------------------------------
+
+itTopologySpaceSatisfiesOnly :: forall a. FocusWarning => Pretty a => Ord a => (TopologySpace a -> Boolean) -> TopologySpace a -> Boolean -> Spec Unit
+itTopologySpaceSatisfiesOnly property topology expected = do
+  let topologyString = pretty topology
+  itOnly (topologyString <> if expected then " should be ✅" else " should be ❌") do
+    let actual = property topology
+    unless (actual == expected)
+      $ fail
+      $ "actual = " <> show actual <> ", expected = " <> show expected
+
+itClosedUnderUnionsOnly :: forall a. FocusWarning => Show a => Pretty a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itClosedUnderUnionsOnly = itTopologySpaceSatisfiesOnly closedUnderUnions
+
+itClosedUnderIntersectionsOnly :: forall a. FocusWarning => Pretty a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itClosedUnderIntersectionsOnly = itTopologySpaceSatisfiesOnly closedUnderIntersections
+
+itContainsEmptySetOnly :: forall a. FocusWarning => Pretty a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itContainsEmptySetOnly = itTopologySpaceSatisfiesOnly containsEmptySet
+
+itContainsParentSetOnly :: forall a. FocusWarning => Pretty a => HasUniverse a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itContainsParentSetOnly = itTopologySpaceSatisfiesOnly containsParentSet
+
+itIsHausdorffOnly :: forall a. FocusWarning => Pretty a => HasUniverse a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itIsHausdorffOnly = itTopologySpaceSatisfiesOnly isHausdorff
+
+itIsValidTopologySpaceOnly :: forall a. FocusWarning => Show a => Pretty a => HasUniverse a => Ord a => TopologySpace a -> Boolean -> Spec Unit
+itIsValidTopologySpaceOnly = itTopologySpaceSatisfiesOnly isValidTopologySpace
+
+----------------------------------------------
+
+itSubsetsOfSize2 :: forall a. Pretty a => Ord a => Set a -> Maybe (Set (TwoElementSet a)) -> Spec Unit
+itSubsetsOfSize2 input expected = do
+  let inputString = pretty input
+  it inputString do
+    let actual = subsetsOfSize2 input
+    unless (actual == expected)
+      $ fail
+      $ "actual = " <> pretty actual <> ", expected = " <> pretty expected
+
 spec :: Spec Unit
 spec = do
+  describe "TwoElementSet and subsetsOfSize2" do
+    itSubsetsOfSize2
+      (Set.fromFoldable [ 1, 2, 3, 4 ])
+      ( Just $ Set.fromFoldable
+          [ TwoElementSet 1 2
+          , TwoElementSet 1 3
+          , TwoElementSet 1 4
+          , TwoElementSet 2 3
+          , TwoElementSet 2 4
+          , TwoElementSet 3 4
+          ]
+      )
+    itSubsetsOfSize2 (Set.fromFoldable [ 1 ]) Nothing
+    itSubsetsOfSize2 (Set.empty :: Set Int) Nothing
+
   describe "Topology" do
     describe "containsEmptySet" do
-      itContainsEmptySet (TopologySpace $ Set.singleton Set.empty :: TopologySpace FinSet2) true
-      itContainsEmptySet (TopologySpace $ Set.singleton (Set.singleton A2)) false
-      itContainsEmptySet (TopologySpace $ Set.fromFoldable [ Set.empty, Set.empty ] :: TopologySpace FinSet2) true
+      itContainsEmptySet (Set.singleton Set.empty :: TopologySpace FinSet2) true
+      itContainsEmptySet (Set.singleton (Set.singleton A2)) false
+      itContainsEmptySet (Set.fromFoldable [ Set.empty, Set.empty ] :: TopologySpace FinSet2) true
 
     describe "containsParentSet" do
-      itContainsParentSet (TopologySpace $ Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2) true
-      itContainsParentSet (TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2 ]) false
-      itContainsParentSet (TopologySpace $ Set.fromFoldable [ Set.singleton A2, Set.singleton B2 ]) false
+      itContainsParentSet (Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2) true
+      itContainsParentSet (Set.fromFoldable [ Set.empty, Set.singleton A2 ]) false
+      itContainsParentSet (Set.fromFoldable [ Set.singleton A2, Set.singleton B2 ]) false
 
     describe "closedUnderUnions" do
-      itClosedUnderUnions (TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]) true
-      itClosedUnderUnions (TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2 ]) false
-      itClosedUnderUnions (TopologySpace $ Set.empty :: TopologySpace FinSet2) false
-      itClosedUnderUnions (TopologySpace $ Set.singleton universe :: TopologySpace FinSet2) true
-      itClosedUnderUnions (TopologySpace $ Set.fromFoldable [ Set.empty, Set.fromFoldable [ A2 ], Set.fromFoldable [ A2, B2 ] ]) true
-      itClosedUnderUnions (TopologySpace $ Set.fromFoldable [ Set.empty, (universe :: Set FinSet2) ]) true
+      itClosedUnderUnions (Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]) true
+      itClosedUnderUnions (Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2 ]) false
+      itClosedUnderUnions (Set.empty :: TopologySpace FinSet2) false
+      itClosedUnderUnions (Set.singleton universe :: TopologySpace FinSet2) false
+      itClosedUnderUnions (Set.fromFoldable [ Set.empty, Set.fromFoldable [ A2 ], Set.fromFoldable [ A2, B2 ] ]) true
+      itClosedUnderUnions (Set.fromFoldable [ Set.empty, (universe :: Set FinSet2) ]) true
 
     describe "closedUnderIntersections" do
-      itClosedUnderIntersections (TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]) true
-      itClosedUnderIntersections (TopologySpace $ Set.fromFoldable [ Set.singleton A2, Set.singleton B2 ]) false
-      itClosedUnderIntersections (TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2, universe ]) true
+      itClosedUnderIntersections (Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]) true
+      itClosedUnderIntersections (Set.fromFoldable [ Set.singleton A2, Set.singleton B2 ]) false
+      itClosedUnderIntersections (Set.fromFoldable [ Set.empty, Set.singleton A2, universe ]) true
 
     describe "isValidTopologySpace" do
-      let discreteTopology = TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
-      let indiscreteTopology = TopologySpace $ Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2
-      let invalidTopology = TopologySpace $ Set.fromFoldable [ Set.singleton A2 ]
-      let emptyTopology = TopologySpace $ Set.empty :: TopologySpace FinSet2
-      let missingEmptyTopology = TopologySpace $ Set.fromFoldable [ Set.singleton A2, universe ]
+      let discreteTopology = Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
+      let indiscreteTopology = Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2
+      let invalidTopology = Set.fromFoldable [ Set.singleton A2 ]
+      let emptyTopology = Set.empty :: TopologySpace FinSet2
+      let missingEmptyTopology = Set.fromFoldable [ Set.singleton A2, universe ]
 
       itIsValidTopologySpace discreteTopology true
       itIsValidTopologySpace indiscreteTopology true
@@ -92,11 +141,11 @@ spec = do
       itIsValidTopologySpace missingEmptyTopology false
 
     describe "isHausdorff" do
-      let discreteTopology = TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
-      let indiscreteTopology = TopologySpace $ Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2
+      let discreteTopology = Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
+      let indiscreteTopology = Set.fromFoldable [ Set.empty, universe ] :: TopologySpace FinSet2
       let
         hausdorffTopology =
-          TopologySpace $ Set.fromFoldable
+          Set.fromFoldable
             [ Set.empty
             , Set.singleton A3
             , Set.singleton B3
@@ -106,7 +155,7 @@ spec = do
             , Set.fromFoldable [ A3, C3 ]
             , universe
             ] :: TopologySpace FinSet3
-      let insufficientSepTopology = TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, universe ] :: TopologySpace FinSet3
+      let insufficientSepTopology = Set.fromFoldable [ Set.empty, Set.singleton A3, universe ] :: TopologySpace FinSet3
 
       itIsHausdorff discreteTopology true
       itIsHausdorff indiscreteTopology false
@@ -180,104 +229,455 @@ spec = do
     powersetUniverse2 `shouldEqual` expectedPowersetOfPowerset
     let
       validTopologies = Set.fromFoldable
-        [ TopologySpace $ Set.fromFoldable [ Set.empty, universe ]
-        , TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2, universe ]
-        , TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton B2, universe ]
-        , TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
+        [ Set.fromFoldable [ Set.empty, universe ]
+        , Set.fromFoldable [ Set.empty, Set.singleton A2, universe ]
+        , Set.fromFoldable [ Set.empty, Set.singleton B2, universe ]
+        , Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
         ]
-    (Set.filter isValidTopologySpace $ Set.map TopologySpace powersetUniverse2) `shouldEqual` validTopologies
+    (Set.filter isValidTopologySpace powersetUniverse2) `shouldEqual` validTopologies
     let
       validHausdorff = Set.fromFoldable
-        [ TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
+        [ Set.fromFoldable [ Set.empty, Set.singleton A2, Set.singleton B2, universe ]
         ]
-    Set.filter isHausdorff (Set.filter isValidTopologySpace $ Set.map TopologySpace powersetUniverse2) `shouldEqual` validHausdorff
-    Set.filter isHausdorff (Set.map TopologySpace powersetUniverse2) `shouldEqual` validHausdorff
+    Set.filter isHausdorff (Set.filter isValidTopologySpace powersetUniverse2) `shouldEqual` validHausdorff
+    Set.filter isHausdorff (powersetUniverse2) `shouldEqual` validHausdorff
 
   describe "topology properties" do
     let
-      topologiesList :: Array { set :: TopologySpace FinSet3, closedUnderUnions :: Boolean, closedUnderIntersections :: Boolean }
+      topologiesList :: Array { set :: TopologySpace FinSet3, closedUnderUnions :: Boolean, closedUnderIntersections :: Boolean, isValidTopologySpace :: Boolean }
       topologiesList =
-        [ -- {∅, {a}, {a,b}, {a,b,c}}
-          { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe ], closedUnderUnions: true, closedUnderIntersections: true }
-        -- {∅, {a}, {a,b}, {a,b,c}, {b}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        --{∅, {a}, {a,b}, {a,b,c}, {b}, {b,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a}, {a,b}, {a,b,c}, {a,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a}, {a,b}, {a,b,c}, {a,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a}, {a,b}, {a,b,c}, {a,c}, {b}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a}, {a,b}, {a,b,c}, {a,c}, {b}, {b,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: true, closedUnderIntersections: true }
-        -- {∅, {a}, {a,b,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, universe ], closedUnderUnions: true, closedUnderIntersections: true }
-        -- {∅, {a}, {a,b,c}, {b,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: true }
-        -- {∅, {a}, {a,b,c}, {a,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ A3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: true }
-        -- {∅, {a}, {a,b,c}, {a,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ A3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a}, {a,b,c}, {a,c}, {b,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ A3, C3 ], Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b}, {a,b,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe ], closedUnderUnions: true, closedUnderIntersections: true }
-        -- {∅, {a,b}, {a,b,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b}, {a,b,c}, {b}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b}, {a,b,c}, {b}, {b,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b}, {a,b,c}, {b}, {b,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe ], closedUnderUnions: true, closedUnderIntersections: true }
-        -- {∅, {a,b,c}, {b}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe, Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: true }
-        -- {∅, {a,b,c}, {b}, {b,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b,c}, {b}, {b,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b,c}, {b,c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ B3, C3 ] ], closedUnderUnions: true, closedUnderIntersections: true }
-        -- {∅, {a,b,c}, {b,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b,c}, {a,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ A3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b,c}, {a,c}, {b}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b,c}, {a,c}, {b}, {b,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
-        -- {∅, {a,b,c}, {a,c}, {b,c}, {c}}
-        , { set: TopologySpace $ Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ A3, C3 ], Set.fromFoldable [ B3, C3 ], Set.singleton C3 ], closedUnderUnions: false, closedUnderIntersections: false }
+        [ { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3 ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ] ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ] ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3 ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe, Set.fromFoldable [ A3, C3 ], Set.singleton B3, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ B3, C3 ] ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ A3, C3 ] ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ A3, C3 ], Set.singleton C3 ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.singleton A3, universe, Set.fromFoldable [ A3, C3 ], Set.fromFoldable [ B3, C3 ], Set.singleton C3 ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton C3 ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3 ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe, Set.singleton B3, Set.fromFoldable [ B3, C3 ] ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, universe ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.singleton B3 ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ B3, C3 ] ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
+        , { set: Set.fromFoldable [ Set.empty, universe, Set.fromFoldable [ B3, C3 ], Set.singleton C3 ]
+          , closedUnderUnions: true
+          , closedUnderIntersections: true
+          , isValidTopologySpace: true
+          }
         ]
-    describe "closedUnderUnions" do
-      for_ topologiesList \testCase -> itClosedUnderUnions testCase.set testCase.closedUnderUnions
 
-    describe "closedUnderIntersections" do
-      pure unit
+    for_ topologiesList \testCase -> do
+      let
+        topologyString = pretty testCase.set
+        makeIt s property expected =
+          it (s <> if expected then " should be ✅" else " should be ❌") do
+            unless (property testCase.set == expected) $ fail $ ""
 
--- for_ topologiesList \testCase -> itClosedUnderIntersections testCase.set testCase.closedUnderUnions
+      describe topologyString do
+        makeIt "closedUnderUnions" closedUnderUnions testCase.closedUnderUnions
+        makeIt "closedUnderIntersections" closedUnderIntersections testCase.closedUnderIntersections
+        makeIt "isValidTopologySpace" isValidTopologySpace testCase.isValidTopologySpace
 
--- it "Powerset of powerset of universe (3 elements)" do
---   let powersetUniverse = powerset universe
---   let powersetUniverse2 = powerset powersetUniverse
---   let
---     validTopologies = TopologySpace $ Set.fromFoldable
---       [ Set.fromFoldable [ Set.empty, universe ]
---       , Set.fromFoldable [ Set.empty, Set.singleton A3, universe ]
---       , Set.fromFoldable [ Set.empty, Set.singleton B3, universe ]
---       , Set.fromFoldable [ Set.empty, Set.singleton C3, universe ]
---       , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton B3, universe ]
---       , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton C3, universe ]
---       , Set.fromFoldable [ Set.empty, Set.singleton B3, Set.singleton C3, universe ]
---       , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton B3, Set.singleton C3, universe ]
---       ]
---   Set.filter isValidTopologySpace powersetUniverse2 `shouldEqual` validTopologies
+    it "Powerset of powerset of universe (3 elements)" do
+      let powersetUniverse = powerset universe
+      let powersetUniverse2 = powerset powersetUniverse
+      let
+        allTopologies = Set.fromFoldable
+          [ Set.empty
+          , (Set.fromFoldable [ Set.empty ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, universe, (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ Set.empty, (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), universe, (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), universe, (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ universe ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ universe, (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ A3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ B3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ B3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ B3, C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ B3, C3 ]), (Set.fromFoldable [ C3 ]) ])
+          , (Set.fromFoldable [ (Set.fromFoldable [ C3 ]) ])
+          ]
+
+      powersetUniverse2 `shouldEqual` allTopologies
+
+      let
+        validTopologies = Set.fromFoldable
+          [ Set.fromFoldable [ Set.empty, universe ] -- τ1: Indiscrete Topology
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton B3, Set.singleton C3, Set.fromFoldable [ A3, B3 ], Set.fromFoldable [ A3, C3 ], Set.fromFoldable [ B3, C3 ], universe ] -- τ2: Discrete Topology
+          , Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, B3 ], universe ] -- τ3: Included Set Topology {a,b}
+          , Set.fromFoldable [ Set.empty, Set.fromFoldable [ A3, C3 ], universe ] -- τ4: Included Set Topology {a,c}
+          , Set.fromFoldable [ Set.empty, Set.fromFoldable [ B3, C3 ], universe ] -- τ5: Included Set Topology {b,c}
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, universe ] -- τ6: Excluded Set Topology {b,c}
+          , Set.fromFoldable [ Set.empty, Set.singleton B3, universe ] -- τ7: Excluded Set Topology {a,c}
+          , Set.fromFoldable [ Set.empty, Set.singleton C3, universe ] -- τ8: Excluded Set Topology {a,b}
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ B3, C3 ], universe ] -- τ9: Partition Topology {a | b,c}
+          , Set.fromFoldable [ Set.empty, Set.singleton B3, Set.fromFoldable [ A3, C3 ], universe ] -- τ10: Partition Topology {b | a,c}
+          , Set.fromFoldable [ Set.empty, Set.singleton C3, Set.fromFoldable [ A3, B3 ], universe ] -- τ11: Partition Topology {c | a,b}
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], universe ] -- τ12: Order Topology a≼b≼c
+          , Set.fromFoldable [ Set.empty, Set.singleton B3, Set.fromFoldable [ A3, B3 ], universe ] -- τ13: Order Topology b≼a≼c
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, C3 ], universe ] -- τ14: Order Topology a≼c≼b
+          , Set.fromFoldable [ Set.empty, Set.singleton C3, Set.fromFoldable [ A3, C3 ], universe ] -- τ15: Order Topology c≼a≼b
+          , Set.fromFoldable [ Set.empty, Set.singleton B3, Set.fromFoldable [ B3, C3 ], universe ] -- τ16: Order Topology b≼c≼a
+          , Set.fromFoldable [ Set.empty, Set.singleton C3, Set.fromFoldable [ B3, C3 ], universe ] -- τ17: Order Topology c≼b≼a
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.fromFoldable [ A3, B3 ], Set.fromFoldable [ A3, C3 ], universe ] -- τ18: Particular Point Topology (a)
+          , Set.fromFoldable [ Set.empty, Set.singleton B3, Set.fromFoldable [ A3, B3 ], Set.fromFoldable [ B3, C3 ], universe ] -- τ19: Particular Point Topology (b)
+          , Set.fromFoldable [ Set.empty, Set.singleton C3, Set.fromFoldable [ A3, C3 ], Set.fromFoldable [ B3, C3 ], universe ] -- τ20: Particular Point Topology (c)
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton B3, Set.fromFoldable [ A3, B3 ], universe ] -- τ21: Excluded Point Topology (c)
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton C3, Set.fromFoldable [ A3, C3 ], universe ] -- τ22: Excluded Point Topology (b)
+          , Set.fromFoldable [ Set.empty, Set.singleton B3, Set.singleton C3, Set.fromFoldable [ B3, C3 ], universe ] -- τ23: Excluded Point Topology (a)
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton B3, Set.fromFoldable [ A3, B3 ], Set.fromFoldable [ A3, C3 ], universe ] -- τ24
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton B3, Set.fromFoldable [ A3, B3 ], Set.fromFoldable [ B3, C3 ], universe ] -- τ25
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton C3, Set.fromFoldable [ A3, B3 ], Set.fromFoldable [ A3, C3 ], universe ] -- τ26
+          , Set.fromFoldable [ Set.empty, Set.singleton A3, Set.singleton C3, Set.fromFoldable [ A3, B3 ], Set.fromFoldable [ B3, C3 ], universe ] -- τ27
+          , Set.fromFoldable [ Set.empty, Set.singleton B3, Set.singleton C3, Set.fromFoldable [ A3, B3 ], Set.fromFoldable [ B3, C3 ], universe ] -- τ28
+          , Set.fromFoldable [ Set.empty, Set.singleton B3, Set.singleton C3, Set.fromFoldable [ A3, C3 ], Set.fromFoldable [ B3, C3 ], universe ] -- τ29
+          ]
+        actualTopologies = Set.filter isValidTopologySpace powersetUniverse2
+
+      -- log $ pretty $ Set.filter (not isValidTopologySpace) validTopologies
+      -- Set.size validTopologies `shouldEqual` 28
+      -- Set.size (Set.filter isValidTopologySpace validTopologies) `shouldEqual` 28
+      -- Set.size actualTopologies `shouldEqual` 28
+
+      when (actualTopologies /= validTopologies) do
+        -- log $ "actual - valid"
+        for_ (Set.filter (not isValidTopologySpace) validTopologies) \actualTopology -> do
+          log $ pretty actualTopology
+          log $ "  containsEmptySet = " <> show (containsEmptySet actualTopology)
+          log $ "  containsParentSet = " <> show (containsParentSet actualTopology)
+          log $ "  closedUnderUnions = " <> show (closedUnderUnions actualTopology)
+          log $ "  closedUnderIntersections = " <> show (closedUnderIntersections actualTopology)
+        -- log $ "valid - actual"
+        -- for_ (Set.difference validTopologies actualTopologies) \actualTopology -> do
+        --   log $ pretty actualTopology
+        --   log $ "  containsEmptySet = " <> show (containsEmptySet actualTopology)
+        --   log $ "  containsParentSet = " <> show (containsParentSet actualTopology)
+        --   log $ "  closedUnderUnions = " <> show (closedUnderUnions actualTopology)
+        --   log $ "  closedUnderIntersections = " <> show (closedUnderIntersections actualTopology)
+        fail $ pretty actualTopologies <> " ≠ " <> pretty validTopologies
 
 -- let
---   validHausdorff = TopologySpace $ Set.fromFoldable
+--   validHausdorff = Set.fromFoldable
 --     [ Set.fromFoldable [Set.empty, Set.singleton A3, Set.singleton B3, Set.singleton C3, universe]
 --     ]
 -- Set.filter isHausdorff (Set.filter isValidTopologySpace powersetUniverse2) `shouldEqual` validHausdorff

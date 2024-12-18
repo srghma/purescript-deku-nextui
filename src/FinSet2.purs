@@ -6,8 +6,7 @@ import Data.Maybe (Maybe(..))
 import Data.Enum (class Enum, class BoundedEnum, Cardinality(..))
 import Data.Generic.Rep (class Generic)
 import Data.Show.Generic (genericShow)
-import Data.Bounded (class Bounded)
-import Topology
+import Topology (class HasUniverse, class Pretty)
 
 data FinSet2 = A2 | B2
 

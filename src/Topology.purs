@@ -4,10 +4,9 @@ import Prelude
 
 import Data.Array as Array
 import Data.Foldable (class Foldable, all, any, foldl, foldr)
-import Data.List (List(..), mapMaybe, (:))
+import Data.List (List, (:))
 import Data.List as List
 import Data.Maybe (Maybe(..))
-import Data.Newtype (class Newtype, unwrap)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.String as String
@@ -20,13 +19,20 @@ class Pretty a where
 instance Pretty Int where
   pretty = show
 
+instance Pretty Boolean where
+  pretty = show
+
 instance Pretty Char where
   pretty = show
+
+instance Pretty a => Pretty (Maybe a) where
+  pretty Nothing = "Nothing"
+  pretty (Just a) = "(Just " <> pretty a <> ")"
 
 instance (Ord a, Pretty a) => Pretty (Set a) where
   pretty subset =
     if Set.isEmpty subset then "∅"
-    else "{" <> (subset # Set.toUnfoldable # Array.sort # map pretty # String.joinWith ",") <> "}"
+    else "{" <> (subset # Set.toUnfoldable # Array.sort # map pretty # Array.sort # String.joinWith ",") <> "}"
 
 newtype ShowUsePretty a = ShowUsePretty a
 
@@ -39,20 +45,19 @@ instance Pretty a => Show (ShowUsePretty a) where
 class HasUniverse a where
   universe :: Set a
 
-newtype TopologySpace a = TopologySpace (Set (Set a))
+type TopologySpace a = Set (Set a)
 
-instance (Ord a, Pretty a) => Pretty (TopologySpace a) where
-  pretty (TopologySpace subset) = pretty subset
-
-instance Newtype (TopologySpace a) (Set (Set a))
-derive newtype instance (Eq a) => Eq (TopologySpace a)
-derive newtype instance (Ord a) => Ord (TopologySpace a)
+-- instance (Ord a, Pretty a) => Pretty (TopologySpace a) where
+--   pretty (TopologySpace subset) = pretty subset
+-- instance Newtype (TopologySpace a) (Set (Set a))
+-- derive newtype instance (Eq a) => Eq (TopologySpace a)
+-- derive newtype instance (Ord a) => Ord (TopologySpace a)
 
 containsEmptySet :: forall a. Ord a => TopologySpace a -> Boolean
-containsEmptySet = Set.member Set.empty <<< unwrap
+containsEmptySet = Set.member Set.empty
 
 containsParentSet :: forall a. Ord a => HasUniverse a => TopologySpace a -> Boolean
-containsParentSet = Set.member universe <<< unwrap
+containsParentSet = Set.member universe
 
 -- | Form the union of a collection of sets
 intersections :: forall f a. Foldable f => Ord a => f (Set a) -> Set a
@@ -62,19 +67,32 @@ intersections = foldl Set.intersection Set.empty
 -- (is_open : set X → Prop)
 -- (is_open_univ : is_open set.univ)
 -- (is_open_empty : is_open ∅)
--- (is_open_inter : ∀ (s t : set X), is_open s → is_open t → is_open (s ∩ t))
+
+tracePrettyId s x = x
+
+-- Debug.trace (s <> ": " <> pretty x) (\_ -> x)
 
 -- | Check if a topology is closed under unions
 -- (is_open_union : ∀ (s : set (set X)), (∀ u ∈ s, is_open u) → is_open (⋃₀ s))
 closedUnderUnions :: forall a. Pretty a => Ord a => Pretty a => TopologySpace a -> Boolean
-closedUnderUnions topology =
-  case subsetsOfSize2 (unwrap topology) of
-    Nothing -> false
-    Just subsets2 -> all (\(TwoElementSet x y) -> Set.member (Set.union x y) (unwrap topology)) (Debug.trace (pretty subsets2) (\_ -> subsets2))
+closedUnderUnions topology = all (\x -> Set.member x topology) (Set.map Set.unions $ powerset topology)
 
 -- | Check if a topology is closed under intersections
-closedUnderIntersections :: forall a. Ord a => TopologySpace a -> Boolean
-closedUnderIntersections topology = Set.member (Set.unions (unwrap topology)) (unwrap topology)
+-- (is_open_inter : ∀ (s t : set X), is_open s → is_open t → is_open (s ∩ t))
+-- closedUnderIntersections topology = all (\x -> Set.member x topology) (Set.map intersections $ powerset topology)
+closedUnderIntersections :: forall a. Pretty a => Ord a => TopologySpace a -> Boolean
+closedUnderIntersections topology =
+  case subsetsOfSize2 (tracePrettyId "topology" topology) of
+    Nothing -> false
+    Just subsets2 -> all
+      ( \(TwoElementSet x y) ->
+          let
+            union = Set.intersection x y
+            isMember = Set.member union topology
+          in
+            tracePrettyId ("union " <> pretty union <> " is a member: " <> show isMember) isMember
+      )
+      (tracePrettyId "subsets2" subsets2)
 
 isValidTopologySpace :: forall a. Pretty a => Ord a => HasUniverse a => TopologySpace a -> Boolean
 isValidTopologySpace topology =
@@ -101,7 +119,7 @@ isHausdorff topology =
 
   openSetsContaining point = Set.filter
     (\s -> any (_ == point) s)
-    (unwrap topology)
+    (topology)
 
 -- Custom type for a TwoElementSet
 data TwoElementSet a = TwoElementSet a a
